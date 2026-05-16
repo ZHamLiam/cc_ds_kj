@@ -10,7 +10,6 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "title": "跨境电商助手",
     "windows": [
       {
         "title": "跨境电商助手",
