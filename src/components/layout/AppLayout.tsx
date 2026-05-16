@@ -1,5 +1,6 @@
 import { Sidebar } from "./Sidebar";
 import { useAppStore } from "../../stores/app";
+import { TranslatePopupPage } from "../../features/translate-popup/TranslatePopupPage";
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -16,7 +17,7 @@ export function AppLayout() {
   const renderPage = () => {
     switch (currentPage) {
       case "translate-popup":
-        return <PlaceholderPage title="划词翻译" />;
+        return <TranslatePopupPage />;
       case "title-translate":
         return <PlaceholderPage title="标题翻译" />;
       case "title-optimize":
