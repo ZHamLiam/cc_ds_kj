@@ -5,6 +5,7 @@ import { TitleTranslatePage } from "../../features/title-translate/TitleTranslat
 import { TitleOptimizePage } from "../../features/title-optimize/TitleOptimizePage";
 import { PricingPage } from "../../features/pricing/PricingPage";
 import { ProductAnalysisPage } from "../../features/product-analysis/ProductAnalysisPage";
+import { SettingsPage } from "../../features/settings/SettingsPage";
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -31,7 +32,7 @@ export function AppLayout() {
       case "product-analysis":
         return <ProductAnalysisPage />;
       case "settings":
-        return <PlaceholderPage title="设置" />;
+        return <SettingsPage />;
       default:
         return <PlaceholderPage title="划词翻译" />;
     }
