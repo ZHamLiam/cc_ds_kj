@@ -4,6 +4,7 @@ import { TranslatePopupPage } from "../../features/translate-popup/TranslatePopu
 import { TitleTranslatePage } from "../../features/title-translate/TitleTranslatePage";
 import { TitleOptimizePage } from "../../features/title-optimize/TitleOptimizePage";
 import { PricingPage } from "../../features/pricing/PricingPage";
+import { ProductAnalysisPage } from "../../features/product-analysis/ProductAnalysisPage";
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -28,7 +29,7 @@ export function AppLayout() {
       case "pricing":
         return <PricingPage />;
       case "product-analysis":
-        return <PlaceholderPage title="选品分析" />;
+        return <ProductAnalysisPage />;
       case "settings":
         return <PlaceholderPage title="设置" />;
       default:
