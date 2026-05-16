@@ -1,5 +1,7 @@
+import { AppLayout } from "./components/layout/AppLayout";
+
 function App() {
-  return <div className="p-4">跨境电商助手</div>;
+  return <AppLayout />;
 }
 
 export default App;
