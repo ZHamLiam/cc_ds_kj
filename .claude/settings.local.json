@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(superpowers:brainstorming)",
+      "Bash(bash *)",
+      "Bash(netstat -ano)",
+      "Bash(findstr 60020)",
+      "Skill(update-config)"
+    ]
+  }
+}

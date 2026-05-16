@@ -1,0 +1,56 @@
+<h2>系统架构方案对比</h2>
+<p class="subtitle">Tauri + React + shadcn/ui + Zustand 基础之上的三种架构模式</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>扁平结构 — 组件直连</h3>
+      <p>所有业务逻辑写在 React 组件内，直接 invoke Tauri 命令调用 LLM。Rust 后端只做 API 代理和文件读写。</p>
+      <div style="margin-top:8px;font-size:13px;color:var(--muted);font-family:monospace;">
+        UI组件 → Tauri invoke → Rust (API代理) → LLM API
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>分层架构 — hooks + store</h3>
+      <p>UI 组件只负责渲染，业务逻辑抽到 hooks，状态集中在 Zustand store，Tauri invoke 封装在 service 层。每个功能模块独立目录。</p>
+      <div style="margin-top:8px;font-size:13px;color:var(--muted);font-family:monospace;">
+        UI(shadcn/ui) → Hooks → Zustand Store → Service → Rust → LLM
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>插件化架构 — 功能注册</h3>
+      <p>每个功能做成自包含插件（组件+hook+types+配置），通过插件注册表统一管理路由、菜单、快捷键。扩展性最强但前期投入大。</p>
+      <div style="margin-top:8px;font-size:13px;color:var(--muted);font-family:monospace;">
+        Plugin Registry → [功能A | 功能B | 功能C] → Shared Services → Rust → LLM
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="pros-cons" style="margin-top:16px;">
+  <div class="pros">
+    <h4>推荐方案 B — 分层架构</h4>
+    <ul>
+      <li>层次清晰：组件/状态/服务各司其职</li>
+      <li>模块独立：每个功能自建目录，互不干扰</li>
+      <li>与 shadcn/ui 的 copy-to-project 模式天然匹配</li>
+      <li>不引入额外抽象负担，适合5个功能模块的规模</li>
+    </ul>
+  </div>
+  <div class="cons">
+    <h4>不选 A / C 的原因</h4>
+    <ul>
+      <li>A：随着功能增多，组件会快速膨胀难以维护</li>
+      <li>C：5 个功能用插件架构属于过度设计</li>
+    </ul>
+  </div>
+</div>
