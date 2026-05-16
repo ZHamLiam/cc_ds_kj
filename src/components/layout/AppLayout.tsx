@@ -1,6 +1,7 @@
 import { Sidebar } from "./Sidebar";
 import { useAppStore } from "../../stores/app";
 import { TranslatePopupPage } from "../../features/translate-popup/TranslatePopupPage";
+import { TitleTranslatePage } from "../../features/title-translate/TitleTranslatePage";
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -19,7 +20,7 @@ export function AppLayout() {
       case "translate-popup":
         return <TranslatePopupPage />;
       case "title-translate":
-        return <PlaceholderPage title="标题翻译" />;
+        return <TitleTranslatePage />;
       case "title-optimize":
         return <PlaceholderPage title="标题优化" />;
       case "pricing":
