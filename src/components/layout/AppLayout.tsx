@@ -3,6 +3,7 @@ import { useAppStore } from "../../stores/app";
 import { TranslatePopupPage } from "../../features/translate-popup/TranslatePopupPage";
 import { TitleTranslatePage } from "../../features/title-translate/TitleTranslatePage";
 import { TitleOptimizePage } from "../../features/title-optimize/TitleOptimizePage";
+import { PricingPage } from "../../features/pricing/PricingPage";
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -25,7 +26,7 @@ export function AppLayout() {
       case "title-optimize":
         return <TitleOptimizePage />;
       case "pricing":
-        return <PlaceholderPage title="定价模板" />;
+        return <PricingPage />;
       case "product-analysis":
         return <PlaceholderPage title="选品分析" />;
       case "settings":
