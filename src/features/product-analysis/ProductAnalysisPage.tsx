@@ -36,7 +36,16 @@ export function ProductAnalysisPage() {
       }
       const jsonMatch = fullText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        setResult(JSON.parse(jsonMatch[0]));
+        try {
+          setResult(JSON.parse(jsonMatch[0]));
+        } catch {
+          setResult({
+            trend: fullText,
+            demandScore: 0,
+            suggestions: [],
+            keywords: [],
+          });
+        }
       } else {
         setResult({
           trend: fullText,

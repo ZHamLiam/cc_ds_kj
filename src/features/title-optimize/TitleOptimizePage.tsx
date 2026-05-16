@@ -35,7 +35,13 @@ export function TitleOptimizePage() {
       }
       const jsonMatch = fullText.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
-        setResults(JSON.parse(jsonMatch[0]));
+        try {
+          setResults(JSON.parse(jsonMatch[0]));
+        } catch {
+          setResults([
+            { title: fullText, seoScore: 0, keywords: [], reason: "JSON 解析失败，显示原始结果" },
+          ]);
+        }
       } else {
         setResults([
           { title: fullText, seoScore: 0, keywords: [], reason: "无法解析结构化结果" },
