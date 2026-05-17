@@ -8,7 +8,7 @@ export default defineConfig(async () => ({
   plugins: [react()],
   resolve: {
     alias: {
-      "src": path.resolve(__dirname, "src"),
+      src: path.resolve(__dirname, "src"),
     },
   },
   clearScreen: false,
@@ -18,5 +18,13 @@ export default defineConfig(async () => ({
     host: host || false,
     hmr: host ? { protocol: "ws", host, port: 1421 } : undefined,
     watch: { ignored: ["**/src-tauri/**"] },
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        popup: path.resolve(__dirname, "popup.html"),
+      },
+    },
   },
 }));

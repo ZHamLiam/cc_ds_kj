@@ -8,6 +8,7 @@ import { useSettingsStore } from "../../stores/settings";
 import { useTitleStore } from "../../stores/title";
 import { splitLines } from "../../lib/utils";
 import { buildLLMConfig } from "../../lib/llm-config";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 type OptimizeResult = { title: string; seoScore: number; keywords: string[]; reason: string };
 type BatchResults = Record<string, OptimizeResult[]>;
@@ -35,6 +36,23 @@ export function TitleOptimizePage() {
   const [batchResults, setBatchResults] = useState<BatchResults>({});
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [maxLength, setMaxLength] = useState("");
+  const [customNote, setCustomNote] = useState("");
+
+  const buildCustomRules = useCallback(() => {
+    const parts: string[] = [];
+    if (maxLength.trim()) {
+      const len = parseInt(maxLength, 10);
+      if (!isNaN(len) && len > 0) {
+        parts.push(`优化后的标题字数不得超过${len}个字符`);
+      }
+    }
+    if (customNote.trim()) {
+      parts.push(customNote.trim());
+    }
+    return parts.join("\n");
+  }, [maxLength, customNote]);
 
   const streamToText = async (system: string, user: string) => {
     let fullText = "";
@@ -71,7 +89,18 @@ export function TitleOptimizePage() {
       const title = titles[i];
       try {
         const userStyle = getStyleProfile(region, platform);
-        const { system, user } = buildTitleOptimizePrompt(title, region, platform, userStyle);
+        const rules = buildCustomRules();
+        let finalStyle = userStyle;
+        if (rules) {
+          finalStyle = {
+            region: userStyle?.region || region,
+            platform: userStyle?.platform || platform,
+            customRules: userStyle?.customRules ? `${userStyle.customRules}\n${rules}` : rules,
+            goodExamples: userStyle?.goodExamples ?? [],
+            updatedAt: userStyle?.updatedAt ?? 0,
+          };
+        }
+        const { system, user } = buildTitleOptimizePrompt(title, region, platform, finalStyle);
         const fullText = await streamToText(system, user);
         const results = parseResults(fullText);
         setBatchResults((prev) => ({ ...prev, [title]: results }));
@@ -84,7 +113,7 @@ export function TitleOptimizePage() {
     }
 
     setBatchProgress(null);
-  }, [originalTitles, region, platform, llmConfig, streamChat, getStyleProfile]);
+  }, [originalTitles, region, platform, llmConfig, streamChat, getStyleProfile, buildCustomRules]);
 
   const titles = splitLines(originalTitles);
   const isBatch = titles.length > 1;
@@ -150,6 +179,43 @@ export function TitleOptimizePage() {
             ))}
           </select>
         </div>
+      </div>
+
+      {/* 高级选项可折叠面板 */}
+      <div className="border rounded-lg overflow-hidden">
+        <button
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="flex items-center gap-1 px-3 py-1.5 w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {showAdvanced ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          高级选项
+          {(maxLength || customNote) && (
+            <span className="ml-1 w-1.5 h-1.5 rounded-full bg-primary" />
+          )}
+        </button>
+        {showAdvanced && (
+          <div className="px-3 pb-3 space-y-2">
+            <div>
+              <label className="text-[10px] text-muted-foreground">标题字数限制</label>
+              <input
+                type="number"
+                value={maxLength}
+                onChange={(e) => setMaxLength(e.target.value)}
+                placeholder="例：80"
+                className="w-full mt-0.5 border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary/20 bg-background"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground">自定义要求</label>
+              <textarea
+                value={customNote}
+                onChange={(e) => setCustomNote(e.target.value)}
+                placeholder="例：语气要活泼、突出价格优势..."
+                className="w-full h-12 mt-0.5 border rounded px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary/20 bg-background"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-4">

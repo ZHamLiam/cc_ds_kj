@@ -11,6 +11,7 @@ import { getRegionsForPlatform, getRegionInfo, TRANSLATE_LANGUAGES, PROVIDER_NAM
 import { useSettingsStore } from "../../stores/settings";
 import { splitLines } from "../../lib/utils";
 import { buildLLMConfig } from "../../lib/llm-config";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 type RegionResult = { text: string; loading: boolean };
 type BatchResults = Record<string, Record<string, RegionResult>>;
@@ -38,6 +39,20 @@ export function TitleTranslatePage() {
   const [batchResults, setBatchResults] = useState<BatchResults>({});
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [glossary, setGlossary] = useState("");
+  const [customNote, setCustomNote] = useState("");
+
+  const buildCustomRules = useCallback(() => {
+    const parts: string[] = [];
+    if (glossary.trim()) {
+      parts.push(`专有名词/品牌名必须保持原文不可直译：\n${glossary.trim()}`);
+    }
+    if (customNote.trim()) {
+      parts.push(customNote.trim());
+    }
+    return parts.join("\n");
+  }, [glossary, customNote]);
 
   const availableRegions = getRegionsForPlatform(platform);
 
@@ -55,7 +70,7 @@ export function TitleTranslatePage() {
     return fullText;
   };
 
-  const translateTitle = async (title: string, sourceLangName: string): Promise<Record<string, RegionResult>> => {
+  const translateTitle = async (title: string, sourceLangName: string, rules?: string): Promise<Record<string, RegionResult>> => {
     const regionResults: Record<string, RegionResult> = {};
     for (const r of selectedRegions) {
       regionResults[r] = { text: "", loading: true };
@@ -68,13 +83,13 @@ export function TitleTranslatePage() {
       try {
         let result: string;
         if (regionInfo.lang === "th") {
-          const { system: s1, user: u1 } = buildTitleEnglishPivotPrompt(title, sourceLangName);
+          const { system: s1, user: u1 } = buildTitleEnglishPivotPrompt(title, sourceLangName, rules);
           const englishTitle = await streamToText(s1, u1);
-          const { system: s2, user: u2 } = buildEnglishTitleToThaiPrompt(englishTitle);
+          const { system: s2, user: u2 } = buildEnglishTitleToThaiPrompt(englishTitle, rules);
           result = await streamToText(s2, u2);
         } else {
           const { system, user } = buildTitleTranslatePrompt(
-            title, sourceLangName, regionInfo.name, regionInfo.lang
+            title, sourceLangName, regionInfo.name, regionInfo.lang, rules
           );
           result = await streamToText(system, user);
         }
@@ -105,14 +120,15 @@ export function TitleTranslatePage() {
     setBatchProgress({ current: 0, total: titles.length });
 
     const sourceLangName = TRANSLATE_LANGUAGES.find((l) => l.code === sourceLang)?.name || sourceLang;
+    const rules = buildCustomRules() || undefined;
 
     for (let i = 0; i < titles.length; i++) {
       setBatchProgress({ current: i + 1, total: titles.length });
-      await translateTitle(titles[i], sourceLangName);
+      await translateTitle(titles[i], sourceLangName, rules);
     }
 
     setBatchProgress(null);
-  }, [sourceTitles, sourceLang, selectedRegions, llmConfig, streamChat]);
+  }, [sourceTitles, sourceLang, selectedRegions, llmConfig, streamChat, buildCustomRules]);
 
   const titles = splitLines(sourceTitles);
   const isBatch = titles.length > 1;
@@ -193,6 +209,44 @@ export function TitleTranslatePage() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* 高级选项可折叠面板 */}
+      <div className="border rounded-lg overflow-hidden">
+        <button
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="flex items-center gap-1 px-3 py-1.5 w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {showAdvanced ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          高级选项
+          {(glossary || customNote) && (
+            <span className="ml-1 w-1.5 h-1.5 rounded-full bg-primary" />
+          )}
+        </button>
+        {showAdvanced && (
+          <div className="px-3 pb-3 space-y-2">
+            <div>
+              <label className="text-[10px] text-muted-foreground">
+                专有名词（每行一个，格式：原文=译文）
+              </label>
+              <textarea
+                value={glossary}
+                onChange={(e) => setGlossary(e.target.value)}
+                placeholder={"iPhone=iPhone\nNBA=NBA"}
+                className="w-full h-12 mt-0.5 border rounded px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary/20 bg-background"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground">自定义要求</label>
+              <textarea
+                value={customNote}
+                onChange={(e) => setCustomNote(e.target.value)}
+                placeholder="例：语气要活泼、突出价格优势..."
+                className="w-full h-12 mt-0.5 border rounded px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary/20 bg-background"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-4">

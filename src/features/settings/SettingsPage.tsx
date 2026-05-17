@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Button } from "../../components/ui/button";
 import { useSettingsStore } from "../../stores/settings";
 import type { LLMProvider, FeatureKey } from "../../types";
@@ -31,6 +32,7 @@ export function SettingsPage() {
     apiKeys, setApiKey, clearAllKeys,
     defaultSelection, setDefaultSelection,
     featureSelections, setFeatureSelection,
+    popupShortcut, setPopupShortcut,
   } = useSettingsStore();
 
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
@@ -206,11 +208,107 @@ export function SettingsPage() {
         </div>
       )}
 
+      {/* 弹出框快捷键 */}
+      <div className="border-t pt-6 space-y-4">
+        <div>
+          <h3 className="font-medium text-sm">弹出框快捷键</h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            选中文本后按下快捷键可触发浮动弹窗
+          </p>
+        </div>
+        <ShortcutRecorder
+          value={popupShortcut}
+          onChange={(s) => {
+            setPopupShortcut(s);
+            invoke("update_shortcut", { shortcut: s }).catch(console.error);
+          }}
+        />
+      </div>
+
       <div className="pt-4 border-t">
         <Button variant="outline" onClick={clearAllKeys} className="text-destructive">
           清除所有 Key
         </Button>
       </div>
+    </div>
+  );
+}
+
+function ShortcutRecorder({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (shortcut: string) => void;
+}) {
+  const [recording, setRecording] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  const handleStartRecord = useCallback(() => {
+    setRecording(true);
+    // Focus a hidden handler
+    setTimeout(() => btnRef.current?.focus(), 50);
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!recording) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const parts: string[] = [];
+      if (e.ctrlKey) parts.push("Ctrl");
+      if (e.altKey) parts.push("Alt");
+      if (e.shiftKey) parts.push("Shift");
+      if (e.metaKey) parts.push("Meta");
+
+      // Map event.code to readable key name
+      const code = e.code;
+      let key = "";
+      if (code.startsWith("Key")) {
+        key = code.slice(3); // e.g., "KeyA" → "A"
+      } else if (code.startsWith("Digit")) {
+        key = code.slice(5); // e.g., "Digit1" → "1"
+      } else if (code === "Space") {
+        key = "Space";
+      } else if (code.startsWith("F") && code.length <= 4) {
+        key = code; // e.g., "F1", "F12"
+      } else {
+        key = code;
+      }
+
+      // Don't record if only modifier keys pressed
+      if (["ControlLeft","ControlRight","ShiftLeft","ShiftRight","AltLeft","AltRight","MetaLeft","MetaRight"].includes(code)) {
+        return;
+      }
+
+      if (parts.length === 0 || !key) return;
+
+      parts.push(key);
+      onChange(parts.join("+"));
+      setRecording(false);
+    },
+    [recording, onChange],
+  );
+
+  return (
+    <div className="flex items-center gap-3">
+      <button
+        ref={btnRef}
+        onClick={handleStartRecord}
+        onKeyDown={handleKeyDown}
+        onBlur={() => setRecording(false)}
+        className={`px-4 py-2 rounded-md border text-sm font-mono min-w-[180px] text-center transition-colors ${
+          recording
+            ? "border-primary bg-primary/5 text-primary animate-pulse"
+            : "bg-muted hover:bg-muted/80"
+        }`}
+      >
+        {recording ? "请按下快捷键..." : value || "未设置"}
+      </button>
+      <span className="text-xs text-muted-foreground">
+        {recording ? "按下组合键完成录制" : "点击按钮后按下新快捷键"}
+      </span>
     </div>
   );
 }
