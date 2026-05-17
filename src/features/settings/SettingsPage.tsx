@@ -1,60 +1,81 @@
 import { useState } from "react";
 import { Button } from "../../components/ui/button";
 import { useSettingsStore } from "../../stores/settings";
-import { useTranslateStore } from "../../stores/translate";
-import { useAppStore } from "../../stores/app";
-import type { LLMProvider } from "../../types";
-import { createDeepSeekConfig } from "../../services/providers/deepseek";
-import { createQwenConfig } from "../../services/providers/qwen";
-import { createGLM4Config } from "../../services/providers/glm4";
+import type { LLMProvider, FeatureKey } from "../../types";
+import {
+  FEATURE_KEYS,
+  FEATURE_LABELS,
+  PROVIDER_NAMES,
+  MODEL_OPTIONS,
+  getDefaultModel,
+} from "../../types";
 
-const PROVIDERS: { id: LLMProvider; name: string; description: string }[] = [
-  { id: "deepseek", name: "DeepSeek", description: "OpenAI 兼容接口" },
-  { id: "qwen", name: "通义千问", description: "阿里 DashScope API" },
-  { id: "glm4", name: "GLM-4", description: "智谱 API" },
-];
+const PROVIDER_DESC: Record<LLMProvider, string> = {
+  deepseek: "OpenAI 兼容接口",
+  qwen: "阿里 DashScope API",
+  glm4: "智谱 API",
+};
+
+const PROVIDERS = (Object.keys(PROVIDER_NAMES) as LLMProvider[]).map((id) => ({
+  id,
+  name: PROVIDER_NAMES[id],
+  description: PROVIDER_DESC[id],
+}));
+
+const FEATURE_HINTS: Partial<Record<FeatureKey, string>> = {
+  "product-analysis": "建议使用支持联网搜索的模型以获得时效性数据",
+};
 
 export function SettingsPage() {
-  const { apiKeys, setApiKey, clearAllKeys } = useSettingsStore();
-  const { setLLMConfig } = useTranslateStore();
-  const { setCurrentProvider, setCurrentModel } = useAppStore();
-  const [activeProvider, setActiveProvider] = useState<LLMProvider>("deepseek");
+  const {
+    apiKeys, setApiKey, clearAllKeys,
+    defaultSelection, setDefaultSelection,
+    featureSelections, setFeatureSelection,
+  } = useSettingsStore();
+
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState(false);
 
   const toggleShowKey = (p: string) =>
     setShowKeys((s) => ({ ...s, [p]: !s[p] }));
 
-  const handleSave = (provider: LLMProvider, key: string) => {
+  const handleSaveKey = (provider: LLMProvider, key: string) => {
     setApiKey(provider, key);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleActivate = (provider: LLMProvider) => {
-    const key = apiKeys[provider];
-    if (!key) return;
-
-    let config;
-    switch (provider) {
-      case "deepseek":
-        config = createDeepSeekConfig(key);
-        break;
-      case "qwen":
-        config = createQwenConfig(key);
-        break;
-      case "glm4":
-        config = createGLM4Config(key);
-        break;
-      default:
-        return;
-    }
-
-    setLLMConfig(config);
-    setCurrentProvider(provider);
-    setCurrentModel(config.model);
-    setActiveProvider(provider);
+  const handleSetDefaultProvider = (provider: LLMProvider) => {
+    if (!apiKeys[provider]) return;
+    const model = defaultSelection?.provider === provider
+      ? defaultSelection.model
+      : getDefaultModel(provider);
+    setDefaultSelection({ provider, model });
   };
+
+  const handleSetDefaultModel = (model: string) => {
+    if (!defaultSelection) return;
+    setDefaultSelection({ ...defaultSelection, model });
+  };
+
+  const handleOverrideProvider = (feature: string, provider: string) => {
+    if (provider === "__default__") {
+      setFeatureSelection(feature, null);
+    } else {
+      const prov = provider as LLMProvider;
+      const existing = featureSelections[feature];
+      const model = existing?.provider === prov ? existing.model : getDefaultModel(prov);
+      setFeatureSelection(feature, { provider: prov, model });
+    }
+  };
+
+  const handleOverrideModel = (feature: string, model: string) => {
+    const existing = featureSelections[feature];
+    if (!existing) return;
+    setFeatureSelection(feature, { ...existing, model });
+  };
+
+  const configuredProviders = PROVIDERS.filter((p) => apiKeys[p.id]);
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
@@ -65,30 +86,29 @@ export function SettingsPage() {
         </p>
       </div>
 
+      {/* API Key 管理 */}
       <div className="space-y-4">
+        <h3 className="font-medium text-sm">API Key</h3>
         {PROVIDERS.map((prov) => (
           <div key={prov.id} className="border rounded-lg p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-medium">{prov.name}</h3>
+                <h4 className="font-medium">{prov.name}</h4>
                 <p className="text-xs text-muted-foreground">{prov.description}</p>
               </div>
-              <Button
-                variant={activeProvider === prov.id ? "default" : "outline"}
-                size="sm"
-                onClick={() => setActiveProvider(prov.id)}
-              >
-                {activeProvider === prov.id ? "当前" : "选择"}
-              </Button>
+              {apiKeys[prov.id] && (
+                <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                  已配置
+                </span>
+              )}
             </div>
-
             <div className="flex gap-2">
               <div className="flex-1 relative">
                 <input
                   type={showKeys[prov.id] ? "text" : "password"}
                   placeholder="输入 API Key..."
                   value={apiKeys[prov.id] || ""}
-                  onChange={(e) => handleSave(prov.id, e.target.value)}
+                  onChange={(e) => handleSaveKey(prov.id, e.target.value)}
                   className="w-full border rounded px-3 py-1.5 text-sm pr-10 bg-background"
                 />
                 <button
@@ -99,20 +119,91 @@ export function SettingsPage() {
                   {showKeys[prov.id] ? "隐藏" : "显示"}
                 </button>
               </div>
-              <Button
-                size="sm"
-                disabled={!apiKeys[prov.id]}
-                onClick={() => handleActivate(prov.id)}
-              >
-                启用
-              </Button>
             </div>
           </div>
         ))}
       </div>
 
-      {saved && (
-        <div className="text-sm text-green-600">API Key 已保存</div>
+      {saved && <div className="text-sm text-green-600">API Key 已保存</div>}
+
+      {/* 默认模型 */}
+      {configuredProviders.length > 0 && (
+        <div className="border-t pt-6 space-y-4">
+          <div>
+            <h3 className="font-medium text-sm">默认模型</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              未单独指定模型的功能将使用此配置
+            </p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {configuredProviders.map((prov) => (
+              <Button
+                key={prov.id}
+                variant={defaultSelection?.provider === prov.id ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleSetDefaultProvider(prov.id)}
+              >
+                {prov.name}
+                {defaultSelection?.provider === prov.id && " ✓"}
+              </Button>
+            ))}
+          </div>
+          {defaultSelection && (
+            <ModelSelect
+              provider={defaultSelection.provider}
+              value={defaultSelection.model}
+              onChange={handleSetDefaultModel}
+            />
+          )}
+        </div>
+      )}
+
+      {/* 各功能模型覆盖 */}
+      {configuredProviders.length > 0 && defaultSelection && (
+        <div className="border-t pt-6 space-y-4">
+          <div>
+            <h3 className="font-medium text-sm">功能模型设置</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              为不同功能单独指定使用的模型供应商和版本
+            </p>
+          </div>
+          <div className="space-y-4">
+            {FEATURE_KEYS.map((feature) => {
+              const sel = featureSelections[feature];
+              return (
+                <div key={feature} className="border rounded-lg p-3 space-y-2">
+                  <div>
+                    <span className="text-sm font-medium">{FEATURE_LABELS[feature as FeatureKey]}</span>
+                    {FEATURE_HINTS[feature] && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{FEATURE_HINTS[feature]}</p>
+                    )}
+                  </div>
+                  <div className="flex gap-3">
+                    <select
+                      value={sel?.provider || "__default__"}
+                      onChange={(e) => handleOverrideProvider(feature, e.target.value)}
+                      className="text-sm border rounded px-2 py-1.5 bg-background"
+                    >
+                      <option value="__default__">跟随默认</option>
+                      {configuredProviders.map((prov) => (
+                        <option key={prov.id} value={prov.id}>
+                          {prov.name}
+                        </option>
+                      ))}
+                    </select>
+                    {sel && (
+                      <ModelSelect
+                        provider={sel.provider}
+                        value={sel.model}
+                        onChange={(m) => handleOverrideModel(feature, m)}
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       <div className="pt-4 border-t">
@@ -121,5 +212,30 @@ export function SettingsPage() {
         </Button>
       </div>
     </div>
+  );
+}
+
+function ModelSelect({
+  provider,
+  value,
+  onChange,
+}: {
+  provider: LLMProvider;
+  value: string;
+  onChange: (model: string) => void;
+}) {
+  const options = MODEL_OPTIONS[provider];
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="text-sm border rounded px-2 py-1.5 bg-background"
+    >
+      {options.map((opt) => (
+        <option key={opt.model} value={opt.model}>
+          {opt.label}
+        </option>
+      ))}
+    </select>
   );
 }

@@ -1,9 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Button } from "../../components/ui/button";
 import { useLLM } from "../../hooks/useLLM";
 import { buildProductAnalysisPrompt } from "../../services/prompts/product-analysis";
-import { useTranslateStore } from "../../stores/translate";
-import { REGIONS, PLATFORMS } from "../../types";
+import { useSettingsStore } from "../../stores/settings";
+import { getRegionsForPlatform, PLATFORMS, PROVIDER_NAMES, type Platform } from "../../types";
+import { buildLLMConfig } from "../../lib/llm-config";
 
 interface AnalysisResult {
   trend: string;
@@ -13,7 +14,19 @@ interface AnalysisResult {
 }
 
 export function ProductAnalysisPage() {
-  const { llmConfig } = useTranslateStore();
+  const featureSelection = useSettingsStore(
+    (s) => s.featureSelections["product-analysis"] || s.defaultSelection || null
+  );
+  const featureApiKey = useSettingsStore((s) => {
+    const sel = s.featureSelections["product-analysis"] || s.defaultSelection;
+    return sel ? s.apiKeys[sel.provider] || null : null;
+  });
+  const llmConfig = useMemo(
+    () => (featureSelection && featureApiKey
+      ? buildLLMConfig(featureSelection.provider, featureApiKey, featureSelection.model)
+      : null),
+    [featureSelection, featureApiKey]
+  );
   const { streamChat } = useLLM();
 
   const [category, setCategory] = useState("");
@@ -68,6 +81,11 @@ export function ProductAnalysisPage() {
         <p className="text-sm text-muted-foreground mt-1">
           输入目标品类，AI 综合分析市场趋势与选品建议
         </p>
+        {llmConfig && featureSelection && (
+          <p className="text-xs text-muted-foreground mt-1">
+            当前模型：{PROVIDER_NAMES[featureSelection.provider]} / {featureSelection.model}
+          </p>
+        )}
       </div>
 
       {!llmConfig && (
@@ -88,15 +106,23 @@ export function ProductAnalysisPage() {
 
       <div className="flex gap-4">
         <div className="space-y-1">
-          <label className="text-sm font-medium">目标地区</label>
-          <select value={region} onChange={(e) => setRegion(e.target.value)} className="text-sm border rounded px-2 py-1 bg-background">
-            {REGIONS.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
+          <label className="text-sm font-medium">目标平台</label>
+          <select
+            value={platform}
+            onChange={(e) => {
+              const p = e.target.value as Platform;
+              setPlatform(p);
+              setRegion(getRegionsForPlatform(p)[0].code);
+            }}
+            className="text-sm border rounded px-2 py-1 bg-background"
+          >
+            {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
         <div className="space-y-1">
-          <label className="text-sm font-medium">目标平台</label>
-          <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="text-sm border rounded px-2 py-1 bg-background">
-            {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
+          <label className="text-sm font-medium">目标地区</label>
+          <select value={region} onChange={(e) => setRegion(e.target.value)} className="text-sm border rounded px-2 py-1 bg-background">
+            {getRegionsForPlatform(platform as Platform).map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
           </select>
         </div>
       </div>

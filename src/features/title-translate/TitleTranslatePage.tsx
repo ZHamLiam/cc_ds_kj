@@ -1,71 +1,134 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Button } from "../../components/ui/button";
 import { useLLM } from "../../hooks/useLLM";
-import { buildTitleTranslatePrompt } from "../../services/prompts/title-translate";
+import {
+  buildTitleTranslatePrompt,
+  buildTitleEnglishPivotPrompt,
+  buildEnglishTitleToThaiPrompt,
+} from "../../services/prompts/title-translate";
 import { RegionTranslationCard } from "./components/RegionTranslationCard";
-import { REGIONS, TRANSLATE_LANGUAGES } from "../../types";
-import { useTranslateStore } from "../../stores/translate";
+import { getRegionsForPlatform, getRegionInfo, TRANSLATE_LANGUAGES, PROVIDER_NAMES, PLATFORMS, type Platform, type Region } from "../../types";
+import { useSettingsStore } from "../../stores/settings";
+import { splitLines } from "../../lib/utils";
+import { buildLLMConfig } from "../../lib/llm-config";
+
+type RegionResult = { text: string; loading: boolean };
+type BatchResults = Record<string, Record<string, RegionResult>>;
 
 export function TitleTranslatePage() {
-  const { llmConfig } = useTranslateStore();
+  const featureSelection = useSettingsStore(
+    (s) => s.featureSelections["title-translate"] || s.defaultSelection || null
+  );
+  const featureApiKey = useSettingsStore((s) => {
+    const sel = s.featureSelections["title-translate"] || s.defaultSelection;
+    return sel ? s.apiKeys[sel.provider] || null : null;
+  });
+  const llmConfig = useMemo(
+    () => (featureSelection && featureApiKey
+      ? buildLLMConfig(featureSelection.provider, featureApiKey, featureSelection.model)
+      : null),
+    [featureSelection, featureApiKey]
+  );
   const { streamChat } = useLLM();
 
-  const [sourceTitle, setSourceTitle] = useState("");
+  const [sourceTitles, setSourceTitles] = useState("");
   const [sourceLang, setSourceLang] = useState("zh-CN");
-  const [selectedRegions, setSelectedRegions] = useState<string[]>(["us"]);
-  const [results, setResults] = useState<Record<string, { text: string; loading: boolean }>>({});
+  const [platform, setPlatform] = useState<Platform>("Shopee");
+  const [selectedRegions, setSelectedRegions] = useState<Region[]>(["tw"]);
+  const [batchResults, setBatchResults] = useState<BatchResults>({});
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const toggleRegion = (code: string) => {
+  const availableRegions = getRegionsForPlatform(platform);
+
+  const toggleRegion = (code: Region) => {
     setSelectedRegions((prev) =>
       prev.includes(code) ? prev.filter((r) => r !== code) : [...prev, code]
     );
   };
 
-  const handleTranslate = useCallback(async () => {
-    if (!sourceTitle.trim() || !llmConfig) return;
-    setError(null);
-
-    const newResults: Record<string, { text: string; loading: boolean }> = {};
-    for (const r of selectedRegions) {
-      newResults[r] = { text: "", loading: true };
+  const streamToText = async (system: string, user: string) => {
+    let fullText = "";
+    for await (const chunk of streamChat(system, user, llmConfig!)) {
+      if (chunk.content) fullText += chunk.content;
     }
-    setResults(newResults);
+    return fullText;
+  };
 
-    const sourceLangName = TRANSLATE_LANGUAGES.find((l) => l.code === sourceLang)?.name || sourceLang;
+  const translateTitle = async (title: string, sourceLangName: string): Promise<Record<string, RegionResult>> => {
+    const regionResults: Record<string, RegionResult> = {};
+    for (const r of selectedRegions) {
+      regionResults[r] = { text: "", loading: true };
+    }
+    // 先设置 loading 状态
+    setBatchResults((prev) => ({ ...prev, [title]: { ...regionResults } }));
 
     for (const regionCode of selectedRegions) {
-      const regionInfo = REGIONS.find((r) => r.code === regionCode)!;
+      const regionInfo = getRegionInfo(regionCode as Region);
       try {
-        const { system, user } = buildTitleTranslatePrompt(
-          sourceTitle, sourceLangName, regionInfo.name, regionInfo.lang
-        );
-        let fullText = "";
-        for await (const chunk of streamChat(system, user, llmConfig)) {
-          if (chunk.content) {
-            fullText += chunk.content;
-            setResults((prev) => ({
-              ...prev,
-              [regionCode]: { text: fullText, loading: false },
-            }));
-          }
+        let result: string;
+        if (regionInfo.lang === "th") {
+          const { system: s1, user: u1 } = buildTitleEnglishPivotPrompt(title, sourceLangName);
+          const englishTitle = await streamToText(s1, u1);
+          const { system: s2, user: u2 } = buildEnglishTitleToThaiPrompt(englishTitle);
+          result = await streamToText(s2, u2);
+        } else {
+          const { system, user } = buildTitleTranslatePrompt(
+            title, sourceLangName, regionInfo.name, regionInfo.lang
+          );
+          result = await streamToText(system, user);
         }
-      } catch (e: any) {
-        setResults((prev) => ({
+        regionResults[regionCode] = { text: result, loading: false };
+        setBatchResults((prev) => ({
           ...prev,
-          [regionCode]: { text: `错误: ${e.message}`, loading: false },
+          [title]: { ...(prev[title] || {}), [regionCode]: { text: result, loading: false } },
+        }));
+      } catch (e: any) {
+        regionResults[regionCode] = { text: `错误: ${e.message}`, loading: false };
+        setBatchResults((prev) => ({
+          ...prev,
+          [title]: { ...(prev[title] || {}), [regionCode]: { text: `错误: ${e.message}`, loading: false } },
         }));
       }
     }
-  }, [sourceTitle, sourceLang, selectedRegions, llmConfig, streamChat]);
+    return regionResults;
+  };
+
+  const handleTranslate = useCallback(async () => {
+    if (!sourceTitles.trim() || !llmConfig) return;
+    setError(null);
+    setBatchResults({});
+
+    const titles = splitLines(sourceTitles);
+    if (titles.length === 0) return;
+
+    setBatchProgress({ current: 0, total: titles.length });
+
+    const sourceLangName = TRANSLATE_LANGUAGES.find((l) => l.code === sourceLang)?.name || sourceLang;
+
+    for (let i = 0; i < titles.length; i++) {
+      setBatchProgress({ current: i + 1, total: titles.length });
+      await translateTitle(titles[i], sourceLangName);
+    }
+
+    setBatchProgress(null);
+  }, [sourceTitles, sourceLang, selectedRegions, llmConfig, streamChat]);
+
+  const titles = splitLines(sourceTitles);
+  const isBatch = titles.length > 1;
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div>
         <h2 className="text-xl font-semibold">标题翻译</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          输入商品标题，选择目标市场，生成多地区翻译结果
+          输入商品标题（每行一个），选择目标市场，生成多地区翻译结果
         </p>
+        {llmConfig && featureSelection && (
+          <p className="text-xs text-muted-foreground mt-1">
+            当前模型：{PROVIDER_NAMES[featureSelection.provider]} / {featureSelection.model}
+          </p>
+        )}
       </div>
 
       {!llmConfig && (
@@ -76,7 +139,9 @@ export function TitleTranslatePage() {
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label className="text-sm font-medium">商品标题</label>
+          <label className="text-sm font-medium">
+            商品标题 {titles.length > 0 && <span className="text-muted-foreground">({titles.length} 条)</span>}
+          </label>
           <select value={sourceLang} onChange={(e) => setSourceLang(e.target.value)} className="text-sm border rounded px-2 py-1 bg-background">
             {TRANSLATE_LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>{l.name}</option>
@@ -84,17 +149,37 @@ export function TitleTranslatePage() {
           </select>
         </div>
         <textarea
-          value={sourceTitle}
-          onChange={(e) => setSourceTitle(e.target.value)}
-          placeholder="输入商品原标题..."
-          className="w-full h-24 p-3 border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background"
+          value={sourceTitles}
+          onChange={(e) => setSourceTitles(e.target.value)}
+          placeholder="输入商品标题，每行一个..."
+          className="w-full h-32 p-3 border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background"
         />
+      </div>
+
+      <div className="flex gap-4 items-end">
+        <div className="space-y-1">
+          <label className="text-sm font-medium">目标平台</label>
+          <select
+            value={platform}
+            onChange={(e) => {
+              const p = e.target.value as Platform;
+              setPlatform(p);
+              const validCodes = getRegionsForPlatform(p).map((r) => r.code);
+              setSelectedRegions((prev) => prev.filter((c) => validCodes.includes(c)));
+            }}
+            className="text-sm border rounded px-2 py-1 bg-background"
+          >
+            {PLATFORMS.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div>
         <label className="text-sm font-medium">目标地区</label>
         <div className="flex gap-2 mt-2 flex-wrap">
-          {REGIONS.map((r) => (
+          {availableRegions.map((r) => (
             <button
               key={r.code}
               onClick={() => toggleRegion(r.code)}
@@ -110,27 +195,52 @@ export function TitleTranslatePage() {
         </div>
       </div>
 
-      <Button onClick={handleTranslate} disabled={!sourceTitle.trim() || !llmConfig || selectedRegions.length === 0}>
-        翻译
-      </Button>
+      <div className="flex items-center gap-4">
+        <Button onClick={handleTranslate} disabled={!sourceTitles.trim() || !llmConfig || selectedRegions.length === 0}>
+          {isBatch ? "批量翻译" : "翻译"}
+        </Button>
+        {batchProgress && (
+          <span className="text-sm text-muted-foreground">
+            正在处理 {batchProgress.current}/{batchProgress.total}...
+          </span>
+        )}
+      </div>
 
       {error && <div className="text-sm text-destructive">{error}</div>}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {selectedRegions.map((code) => {
-          const region = REGIONS.find((r) => r.code === code)!;
-          const result = results[code];
-          return (
-            <RegionTranslationCard
-              key={code}
-              regionName={region.name}
-              regionCode={code}
-              text={result?.text || ""}
-              isLoading={result?.loading || false}
-            />
-          );
-        })}
-      </div>
+      {titles.length > 0 && Object.keys(batchResults).length > 0 && (
+        <div className="space-y-6">
+          {titles.map((title, idx) => {
+            const titleResults = batchResults[title];
+            if (!titleResults) return null;
+            return (
+              <div key={idx} className="space-y-2">
+                {isBatch && (
+                  <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary" />
+                    标题 {idx + 1}: {title}
+                  </h3>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {selectedRegions.map((code) => {
+                    const region = getRegionInfo(code as Region);
+                    const result = titleResults[code];
+                    return (
+                      <RegionTranslationCard
+                        key={code}
+                        regionName={region.name}
+                        regionCode={code}
+                        text={result?.text || ""}
+                        isLoading={result?.loading || false}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

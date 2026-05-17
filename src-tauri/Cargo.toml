@@ -1,6 +1,6 @@
 [package]
 name = "cc_ds_kj"
-version = "0.1.0"
+version = "0.2.0"
 description = "跨境电商助手"
 authors = [""]
 edition = "2021"

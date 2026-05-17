@@ -1,10 +1,16 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Button } from "../../components/ui/button";
 import { useTranslateStore } from "../../stores/translate";
+import { useSettingsStore } from "../../stores/settings";
 import { useLLM } from "../../hooks/useLLM";
-import { buildTranslatePrompt } from "../../services/prompts/translate";
+import { buildLLMConfig } from "../../lib/llm-config";
+import {
+  buildTranslatePrompt,
+  buildEnglishPivotPrompt,
+  buildEnglishToThaiPrompt,
+} from "../../services/prompts/translate";
 import { TranslationResult } from "./components/TranslationResult";
-import { TRANSLATE_LANGUAGES } from "../../types";
+import { TRANSLATE_LANGUAGES, PROVIDER_NAMES } from "../../types";
 
 export function TranslatePopupPage() {
   const {
@@ -12,12 +18,33 @@ export function TranslatePopupPage() {
     translatedText, setTranslatedText,
     isTranslating, setTranslating,
     error, setError,
-    llmConfig,
   } = useTranslateStore();
+
+  const featureSelection = useSettingsStore(
+    (s) => s.featureSelections["translate-popup"] || s.defaultSelection || null
+  );
+  const featureApiKey = useSettingsStore((s) => {
+    const sel = s.featureSelections["translate-popup"] || s.defaultSelection;
+    return sel ? s.apiKeys[sel.provider] || null : null;
+  });
+  const llmConfig = useMemo(
+    () => (featureSelection && featureApiKey
+      ? buildLLMConfig(featureSelection.provider, featureApiKey, featureSelection.model)
+      : null),
+    [featureSelection, featureApiKey]
+  );
 
   const { streamChat } = useLLM();
   const [sourceLang, setSourceLang] = useState("auto");
   const [targetLang, setTargetLang] = useState("zh-CN");
+
+  const streamToText = async (system: string, user: string) => {
+    let fullText = "";
+    for await (const chunk of streamChat(system, user, llmConfig!)) {
+      if (chunk.content) fullText += chunk.content;
+    }
+    return fullText;
+  };
 
   const handleTranslate = useCallback(async () => {
     if (!sourceText.trim() || !llmConfig) return;
@@ -31,15 +58,22 @@ export function TranslatePopupPage() {
         : TRANSLATE_LANGUAGES.find(l => l.code === sourceLang)?.name || sourceLang;
       const targetLangLabel = TRANSLATE_LANGUAGES.find(l => l.code === targetLang)?.name || targetLang;
 
-      const { system, user } = buildTranslatePrompt(sourceText, sourceLangLabel, targetLangLabel);
+      let result: string;
 
-      let fullText = "";
-      for await (const chunk of streamChat(system, user, llmConfig)) {
-        if (chunk.content) {
-          fullText += chunk.content;
-          setTranslatedText(fullText);
-        }
+      if (targetLang === "th") {
+        // 泰语：先翻译成英语，再从英语翻译为泰语
+        const { system: s1, user: u1 } = buildEnglishPivotPrompt(sourceText, sourceLangLabel);
+        const englishText = await streamToText(s1, u1);
+        setTranslatedText("");
+
+        const { system: s2, user: u2 } = buildEnglishToThaiPrompt(englishText);
+        result = await streamToText(s2, u2);
+      } else {
+        const { system, user } = buildTranslatePrompt(sourceText, sourceLangLabel, targetLangLabel);
+        result = await streamToText(system, user);
       }
+
+      setTranslatedText(result);
     } catch (e: any) {
       setError(e.message || "翻译失败");
     } finally {
@@ -54,6 +88,11 @@ export function TranslatePopupPage() {
         <p className="text-sm text-muted-foreground mt-1">
           输入或粘贴文本，选择目标语言进行翻译
         </p>
+        {llmConfig && featureSelection && (
+          <p className="text-xs text-muted-foreground mt-1">
+            当前模型：{PROVIDER_NAMES[featureSelection.provider]} / {featureSelection.model}
+          </p>
+        )}
       </div>
 
       {!llmConfig && (

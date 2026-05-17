@@ -1,16 +1,16 @@
 # 跨境电商助手
 
-一款基于 Tauri 2.x 的桌面应用，面向跨境电商卖家，集成标题优化、多语种翻译、选品分析、定价计算等 AI 辅助功能。支持 DeepSeek、通义千问、GLM-4 多模型切换。
+一款基于 Tauri 2.x 的桌面应用，面向跨境电商卖家，集成标题优化、多语种翻译、选品分析、定价计算等 AI 辅助功能。支持 DeepSeek、通义千问、GLM-4 多模型及版本切换，可按功能独立配置模型。
 
 ## 功能模块
 
 | 模块 | 说明 |
 |------|------|
-| 标题优化 | 根据目标地区和平台生成优化的商品标题 |
-| 标题翻译 | 将商品标题翻译为多语种（英语、简体中文、繁体中文、泰文） |
-| 选品分析 | 基于品类、地区、平台分析市场趋势和选品建议 |
+| 标题优化 | 根据目标平台和地区生成 SEO 优化的商品标题，支持批量输入 |
+| 标题翻译 | 将商品标题批量翻译为多语种（按平台自动匹配目标地区语言） |
+| 选品分析 | 基于品类、平台、地区分析市场趋势与选品建议 |
 | 定价模板 | 成本项配置、费率计算、运费规则、利润预估 |
-| 划词翻译 | 选中文本后快速翻译 |
+| 划词翻译 | 输入文本快速翻译，泰语自动中转英语优化质量 |
 
 ## 技术栈
 
@@ -22,11 +22,26 @@
 | 状态管理 | Zustand |
 | LLM 接入 | DeepSeek / 通义千问 (Qwen) / GLM-4（均兼容 OpenAI 接口格式） |
 
-## 支持的平台
+## 模型支持
 
-- **电商平台：** Amazon、Shopee、Lazada、TikTok Shop
-- **目标地区：** 美国、中国大陆、台湾、泰国
-- **翻译语言：** 英语、简体中文、繁体中文、泰文
+| 供应商 | 可选模型版本 |
+|--------|-------------|
+| DeepSeek | V3、V4 Flash、V4 Pro |
+| 通义千问 | Plus、Max、Turbo |
+| GLM-4 | Flash、4.7 Flash、Plus |
+
+可在设置中为不同功能独立指定模型供应商和版本，未指定的功能回退到默认模型。
+
+## 平台与地区
+
+| 平台 | 运营地区 |
+|------|----------|
+| Amazon | 美国 |
+| Shopee | 台湾、泰国、菲律宾、马来西亚 |
+| Lazada | 台湾、泰国、菲律宾、马来西亚 |
+| TikTok Shop | 台湾、泰国、菲律宾、马来西亚 |
+
+选择平台后自动过滤对应的目标地区，避免不合理组合。
 
 ## 环境要求
 
@@ -60,11 +75,17 @@ npm run tauri build
 
 ## 配置 API Key
 
-启动应用后，进入 **设置** 页面，填入对应模型的 API Key：
+启动应用后，进入 **设置** 页面：
 
-- **DeepSeek：** 在 [DeepSeek 开放平台](https://platform.deepseek.com/) 获取
-- **通义千问：** 在 [阿里云 DashScope](https://dashscope.aliyun.com/) 获取
-- **GLM-4：** 在 [智谱开放平台](https://open.bigmodel.cn/) 获取
+1. 填入所需模型的 API Key（DeepSeek、通义千问、GLM-4）
+2. 选择默认模型供应商和版本
+3. 可单独为各功能覆盖不同的模型
+
+### API Key 获取地址
+
+- **DeepSeek：** [platform.deepseek.com](https://platform.deepseek.com/)
+- **通义千问：** [dashscope.aliyun.com](https://dashscope.aliyun.com/)
+- **GLM-4：** [open.bigmodel.cn](https://open.bigmodel.cn/)
 
 API Key 加密存储在本地，不会上传至任何服务器。
 
@@ -106,7 +127,7 @@ UI(shadcn/ui) → Hooks → Zustand Store → Service → Tauri invoke → Rust 
 ```
 
 - UI 组件只负责渲染，不包含业务逻辑
-- 业务逻辑集中在 hooks 中
+- 业务逻辑在 hooks 中
 - 全局状态通过 Zustand store 管理
 - LLM 调用封装在 service 层，新增模型只需在 `providers/` 下添加适配文件
 - Rust 后端负责存储、剪贴板和窗口管理
