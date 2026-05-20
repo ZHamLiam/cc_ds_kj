@@ -46,9 +46,17 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
             if !text.is_empty() && text != last_content {
                 last_content = text.clone();
 
-                if let Ok(enigo) = enigo::Enigo::new(&enigo::Settings::default()) {
-                    if let Ok((x, y)) = enigo.location() {
-                        show_popup(&app_handle, &text, x, y);
+                // Check clipboard auto-popup toggle
+                let auto_popup = app_handle
+                    .try_state::<AppState>()
+                    .and_then(|s| s.clipboard_auto_popup.lock().ok().map(|v| *v))
+                    .unwrap_or(true);
+
+                if auto_popup {
+                    if let Ok(enigo) = enigo::Enigo::new(&enigo::Settings::default()) {
+                        if let Ok((x, y)) = enigo.location() {
+                            show_popup(&app_handle, &text, x, y);
+                        }
                     }
                 }
             }
