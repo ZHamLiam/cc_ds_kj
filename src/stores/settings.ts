@@ -3,6 +3,11 @@ import type { LLMProvider, ProviderSelection } from "../types";
 import type { LLMConfig } from "../services/llm-client";
 import { buildLLMConfig } from "../lib/llm-config";
 
+export interface CloseBehavior {
+  behavior: "minimize_to_tray" | "close_app";
+  skipDialog: boolean;
+}
+
 interface SettingsState {
   apiKeys: Record<string, string>;
   defaultSelection: ProviderSelection | null;
@@ -17,6 +22,8 @@ interface SettingsState {
   getLLMConfig: (feature: string) => LLMConfig | null;
   setPopupShortcut: (shortcut: string) => void;
   setClipboardAutoPopup: (enabled: boolean) => void;
+  closeBehavior: CloseBehavior;
+  setCloseBehavior: (cb: CloseBehavior) => void;
   hydrateFromJson: (json: string) => void;
 }
 
@@ -26,6 +33,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   featureSelections: {},
   popupShortcut: "Ctrl+Shift+Space",
   clipboardAutoPopup: true,
+  closeBehavior: { behavior: "minimize_to_tray", skipDialog: false },
   setApiKey: (provider, key) =>
     set((s) => ({ apiKeys: { ...s.apiKeys, [provider]: key } })),
   getApiKey: (provider) => get().apiKeys[provider] || "",
@@ -52,6 +60,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
   setPopupShortcut: (shortcut) => set({ popupShortcut: shortcut }),
   setClipboardAutoPopup: (enabled) => set({ clipboardAutoPopup: enabled }),
+  setCloseBehavior: (cb) => set({ closeBehavior: cb }),
   hydrateFromJson: (json) => {
     try {
       const parsed = JSON.parse(json);
@@ -70,6 +79,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }
       if (typeof parsed.clipboardAutoPopup === "boolean") {
         patch.clipboardAutoPopup = parsed.clipboardAutoPopup;
+      }
+      if (parsed.closeBehavior && typeof parsed.closeBehavior === "object") {
+        const { behavior, skipDialog } = parsed.closeBehavior;
+        if (
+          (behavior === "minimize_to_tray" || behavior === "close_app") &&
+          typeof skipDialog === "boolean"
+        ) {
+          patch.closeBehavior = { behavior, skipDialog };
+        }
       }
       set(patch);
     } catch {
