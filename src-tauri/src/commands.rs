@@ -1,7 +1,23 @@
 use std::sync::Mutex;
 use enigo::Mouse;
+use serde::{Deserialize, Serialize};
 use tauri::Manager;
 use tauri::State;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloseBehavior {
+    pub behavior: String,      // "minimize_to_tray" | "close_app"
+    pub skip_dialog: bool,
+}
+
+impl Default for CloseBehavior {
+    fn default() -> Self {
+        Self {
+            behavior: "minimize_to_tray".to_string(),
+            skip_dialog: false,
+        }
+    }
+}
 
 pub struct AppState {
     pub last_clipboard: Mutex<String>,
@@ -9,6 +25,7 @@ pub struct AppState {
     pub popup_visible: Mutex<bool>,
     pub current_shortcut: Mutex<String>,
     pub clipboard_auto_popup: Mutex<bool>,
+    pub close_behavior: Mutex<CloseBehavior>,
 }
 
 #[tauri::command]
@@ -108,4 +125,31 @@ pub fn save_settings(
 ) -> Result<(), String> {
     let path = settings_path(&app_handle)?;
     std::fs::write(&path, &settings_json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn minimize_to_tray(app_handle: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        window.hide().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn close_app(app_handle: tauri::AppHandle) -> Result<(), String> {
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    app_handle.exit(0);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_close_behavior(
+    state: State<AppState>,
+    behavior: String,
+    skip_dialog: bool,
+) -> Result<(), String> {
+    let mut cb = state.close_behavior.lock().map_err(|e| e.to_string())?;
+    cb.behavior = behavior;
+    cb.skip_dialog = skip_dialog;
+    Ok(())
 }
