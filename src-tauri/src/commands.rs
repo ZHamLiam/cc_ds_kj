@@ -4,11 +4,11 @@ use tauri::Manager;
 use tauri::State;
 
 pub struct AppState {
-    #[allow(dead_code)]
     pub last_clipboard: Mutex<String>,
     pub llm_config: Mutex<String>,
     pub popup_visible: Mutex<bool>,
     pub current_shortcut: Mutex<String>,
+    pub clipboard_auto_popup: Mutex<bool>,
 }
 
 #[tauri::command]
@@ -45,14 +45,12 @@ pub fn update_shortcut(
     let parsed = crate::floating::parse_shortcut_string(&shortcut)
         .map_err(|e| e.to_string())?;
     let mut current = state.current_shortcut.lock().map_err(|e| e.to_string())?;
-    // Unregister old shortcut
     if !current.is_empty() {
         if let Some(old) = crate::floating::parse_shortcut_string(&current).ok() {
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
             let _ = app_handle.global_shortcut().unregister(old);
         }
     }
-    // Register new shortcut
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
     app_handle
         .global_shortcut()
@@ -73,4 +71,41 @@ pub fn hide_popup(app_handle: tauri::AppHandle) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn set_clipboard_auto_popup(
+    state: State<AppState>,
+    enabled: bool,
+) -> Result<(), String> {
+    let mut flag = state.clipboard_auto_popup.lock().map_err(|e| e.to_string())?;
+    *flag = enabled;
+    Ok(())
+}
+
+fn settings_path(app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("settings.json"))
+}
+
+#[tauri::command]
+pub fn load_settings(app_handle: tauri::AppHandle) -> Result<String, String> {
+    let path = settings_path(&app_handle)?;
+    if !path.exists() {
+        return Ok("{}".into());
+    }
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_settings(
+    app_handle: tauri::AppHandle,
+    settings_json: String,
+) -> Result<(), String> {
+    let path = settings_path(&app_handle)?;
+    std::fs::write(&path, &settings_json).map_err(|e| e.to_string())
 }

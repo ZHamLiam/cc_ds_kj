@@ -23,6 +23,7 @@ pub fn run() {
             llm_config: Mutex::new(String::new()),
             popup_visible: Mutex::new(false),
             current_shortcut: Mutex::new("Ctrl+Shift+Space".into()),
+            clipboard_auto_popup: Mutex::new(false),
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_cursor_position,
@@ -30,6 +31,9 @@ pub fn run() {
             commands::get_llm_config,
             commands::hide_popup,
             commands::update_shortcut,
+            commands::set_clipboard_auto_popup,
+            commands::load_settings,
+            commands::save_settings,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
