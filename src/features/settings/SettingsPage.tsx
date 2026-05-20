@@ -33,6 +33,7 @@ export function SettingsPage() {
     defaultSelection, setDefaultSelection,
     featureSelections, setFeatureSelection,
     popupShortcut, setPopupShortcut,
+    clipboardAutoPopup, setClipboardAutoPopup,
   } = useSettingsStore();
 
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
@@ -223,6 +224,38 @@ export function SettingsPage() {
             invoke("update_shortcut", { shortcut: s }).catch(console.error);
           }}
         />
+      </div>
+
+      {/* 弹窗自动触发开关 */}
+      <div className="border-t pt-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-medium text-sm">复制时自动弹窗</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              关闭后仍可通过快捷键手动触发弹窗
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={clipboardAutoPopup}
+            onClick={() => {
+              setClipboardAutoPopup(!clipboardAutoPopup);
+              invoke("set_clipboard_auto_popup", { enabled: !clipboardAutoPopup }).catch(
+                console.error,
+              );
+            }}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              clipboardAutoPopup ? "bg-primary" : "bg-muted-foreground/30"
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                clipboardAutoPopup ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
       </div>
 
       <div className="pt-4 border-t">
