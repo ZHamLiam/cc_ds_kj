@@ -8,6 +8,7 @@ interface SettingsState {
   defaultSelection: ProviderSelection | null;
   featureSelections: Partial<Record<string, ProviderSelection>>;
   popupShortcut: string;
+  clipboardAutoPopup: boolean;
   setApiKey: (provider: LLMProvider, key: string) => void;
   getApiKey: (provider: LLMProvider) => string;
   clearAllKeys: () => void;
@@ -15,6 +16,8 @@ interface SettingsState {
   setFeatureSelection: (feature: string, sel: ProviderSelection | null) => void;
   getLLMConfig: (feature: string) => LLMConfig | null;
   setPopupShortcut: (shortcut: string) => void;
+  setClipboardAutoPopup: (enabled: boolean) => void;
+  hydrateFromJson: (json: string) => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -22,6 +25,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   defaultSelection: null,
   featureSelections: {},
   popupShortcut: "Ctrl+Shift+Space",
+  clipboardAutoPopup: true,
   setApiKey: (provider, key) =>
     set((s) => ({ apiKeys: { ...s.apiKeys, [provider]: key } })),
   getApiKey: (provider) => get().apiKeys[provider] || "",
@@ -47,4 +51,29 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     return buildLLMConfig(sel.provider, key, sel.model);
   },
   setPopupShortcut: (shortcut) => set({ popupShortcut: shortcut }),
+  setClipboardAutoPopup: (enabled) => set({ clipboardAutoPopup: enabled }),
+  hydrateFromJson: (json) => {
+    try {
+      const parsed = JSON.parse(json);
+      const patch: Partial<SettingsState> = {};
+      if (parsed.apiKeys && typeof parsed.apiKeys === "object") {
+        patch.apiKeys = parsed.apiKeys;
+      }
+      if (parsed.defaultSelection && typeof parsed.defaultSelection === "object") {
+        patch.defaultSelection = parsed.defaultSelection;
+      }
+      if (parsed.featureSelections && typeof parsed.featureSelections === "object") {
+        patch.featureSelections = parsed.featureSelections;
+      }
+      if (typeof parsed.popupShortcut === "string") {
+        patch.popupShortcut = parsed.popupShortcut;
+      }
+      if (typeof parsed.clipboardAutoPopup === "boolean") {
+        patch.clipboardAutoPopup = parsed.clipboardAutoPopup;
+      }
+      set(patch);
+    } catch {
+      // Ignore parse errors, use defaults
+    }
+  },
 }));
